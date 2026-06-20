@@ -191,6 +191,10 @@ func (h *Handler) codexKeysWithAuthIndex() []codexKeyWithAuthIndex {
 		if key := strings.TrimSpace(entry.APIKey); key != "" {
 			id, _ := idGen.Next("codex:apikey", key, entry.BaseURL)
 			authIndex = liveIndexByID[id]
+		} else if entry.Auth != nil && strings.TrimSpace(entry.Auth.Command) != "" {
+			idParts := append(synthesizer.CommandAuthIDParts(entry.Auth), entry.BaseURL)
+			id, _ := idGen.Next("codex:apikey", idParts...)
+			authIndex = liveIndexByID[id]
 		}
 		out[i] = codexKeyWithAuthIndex{
 			CodexKey:  entry,
@@ -290,7 +294,11 @@ func (h *Handler) openAICompatibilityWithAuthIndex() []openAICompatibilityWithAu
 			DisableCooling:        entry.DisableCooling,
 			AuthIndex:             "",
 		}
-		if len(entry.APIKeyEntries) == 0 {
+		if entry.Auth != nil && strings.TrimSpace(entry.Auth.Command) != "" {
+			idParts := append(synthesizer.CommandAuthIDParts(entry.Auth), entry.BaseURL, strings.TrimSpace(entry.ProxyURL))
+			id, _ := idGen.Next(idKind, idParts...)
+			response.AuthIndex = liveIndexByID[id]
+		} else if len(entry.APIKeyEntries) == 0 {
 			id, _ := idGen.Next(idKind, entry.BaseURL)
 			response.AuthIndex = liveIndexByID[id]
 		} else {

@@ -218,6 +218,14 @@ func (s *ConfigSynthesizer) synthesizeCodexStyleKeys(ctx *SynthesisContext, entr
 			"api_key":      key,
 			"config_index": strconv.Itoa(i),
 		}
+		id, token := idGen.Next("codex:apikey", idParts...)
+		attrs := map[string]string{
+			"source": fmt.Sprintf("config:codex[%s]", token),
+		}
+		if key != "" {
+			attrs["api_key"] = key
+		}
+		addCommandAuthToAttrs(ck.Auth, attrs)
 		metadata := map[string]any{}
 		if entry.DisableCooling {
 			metadata["disable_cooling"] = true
@@ -280,6 +288,47 @@ func (s *ConfigSynthesizer) synthesizeOpenAICompat(ctx *SynthesisContext) []*cor
 		internalProviderKey := util.OpenAICompatibleProviderKey(providerName)
 		base := strings.TrimSpace(compat.BaseURL)
 		disableCooling := compat.DisableCooling
+
+		if compat.Auth != nil && strings.TrimSpace(compat.Auth.Command) != "" {
+			idKind := fmt.Sprintf("openai-compatibility:%s", providerName)
+			idParts := append(CommandAuthIDParts(compat.Auth), base, strings.TrimSpace(compat.ProxyURL))
+			id, token := idGen.Next(idKind, idParts...)
+			attrs := map[string]string{
+				"source":       fmt.Sprintf("config:%s[%s]", providerName, token),
+				"base_url":     base,
+				"compat_name":  compat.Name,
+				"provider_key": internalProviderKey,
+			}
+			addCommandAuthToAttrs(compat.Auth, attrs)
+			metadata := map[string]any{}
+			if disableCooling {
+				metadata["disable_cooling"] = true
+			}
+			if compat.Priority != 0 {
+				attrs["priority"] = strconv.Itoa(compat.Priority)
+			}
+			if hash := diff.ComputeOpenAICompatModelsHash(compat.Models); hash != "" {
+				attrs["models_hash"] = hash
+			}
+			addConfigHeadersToAttrs(compat.Headers, attrs)
+			a := &coreauth.Auth{
+				ID:         id,
+				Provider:   internalProviderKey,
+				Label:      compat.Name,
+				Prefix:     prefix,
+				Status:     coreauth.StatusActive,
+				ProxyURL:   strings.TrimSpace(compat.ProxyURL),
+				Attributes: attrs,
+				Metadata:   metadata,
+				CreatedAt:  now,
+				UpdatedAt:  now,
+			}
+			if len(a.Metadata) == 0 {
+				a.Metadata = nil
+			}
+			out = append(out, a)
+			continue
+		}
 
 		// Handle new APIKeyEntries format (preferred)
 		createdEntries := 0

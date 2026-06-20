@@ -434,6 +434,50 @@ func TestConfigSynthesizer_CodexKeys_SkipsEmptyAndHeaders(t *testing.T) {
 	}
 }
 
+func TestConfigSynthesizer_OpenAICompatCommandAuth(t *testing.T) {
+	synth := NewConfigSynthesizer()
+	ctx := &SynthesisContext{
+		Config: &config.Config{
+			OpenAICompatibility: []config.OpenAICompatibility{
+				{
+					Name:     "proxy",
+					BaseURL:  "https://proxy.example.com/v1",
+					ProxyURL: "http://proxy.local",
+					Auth: &config.CommandAuthConfig{
+						Command:           "fetch-token",
+						Args:              []string{"--audience", "codex"},
+						TimeoutMS:         5000,
+						RefreshIntervalMS: 300000,
+					},
+				},
+			},
+		},
+		Now:         time.Now(),
+		IDGenerator: NewStableIDGenerator(),
+	}
+
+	auths, err := synth.Synthesize(ctx)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(auths) != 1 {
+		t.Fatalf("expected 1 auth, got %d", len(auths))
+	}
+	auth := auths[0]
+	if auth.ProxyURL != "http://proxy.local" {
+		t.Fatalf("proxy_url = %q, want http://proxy.local", auth.ProxyURL)
+	}
+	if _, ok := auth.Attributes["api_key"]; ok {
+		t.Fatal("command auth should not set static api_key")
+	}
+	if got := auth.Attributes[coreauth.AttrAuthSource]; got != coreauth.AttrAuthSourceCommand {
+		t.Fatalf("auth_source = %q, want command", got)
+	}
+	if got := auth.Attributes["provider_key"]; got == "" {
+		t.Fatal("provider_key should be set")
+	}
+}
+
 func TestConfigSynthesizer_OpenAICompat(t *testing.T) {
 	tests := []struct {
 		name    string
