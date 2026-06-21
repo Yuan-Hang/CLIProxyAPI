@@ -17,6 +17,10 @@ type VertexCompatKey struct {
 	// Maps to the x-goog-api-key header.
 	APIKey string `yaml:"api-key" json:"api-key"`
 
+	// Auth executes a command to obtain a token before upstream requests.
+	// Mutually exclusive with APIKey.
+	Auth *CommandAuthConfig `yaml:"auth,omitempty" json:"auth,omitempty"`
+
 	// Priority controls selection preference when multiple credentials match.
 	// Higher values are preferred; defaults to 0.
 	Priority int `yaml:"priority,omitempty" json:"priority,omitempty"`
@@ -90,7 +94,8 @@ func (cfg *Config) SanitizeVertexCompatKeys() {
 	for i := range cfg.VertexCompatAPIKey {
 		entry := cfg.VertexCompatAPIKey[i]
 		entry.APIKey = strings.TrimSpace(entry.APIKey)
-		if entry.APIKey == "" {
+		normalizeCommandAuth(entry.Auth)
+		if entry.APIKey == "" && (entry.Auth == nil || strings.TrimSpace(entry.Auth.Command) == "") {
 			continue
 		}
 		entry.Prefix = normalizeModelPrefix(entry.Prefix)
@@ -112,6 +117,9 @@ func (cfg *Config) SanitizeVertexCompatKeys() {
 
 		// Use API key + base URL as uniqueness key
 		uniqueKey := entry.APIKey + "|" + entry.BaseURL
+		if entry.APIKey == "" {
+			uniqueKey = CommandAuthIdentity(entry.Auth) + "|" + entry.BaseURL
+		}
 		if _, exists := seen[uniqueKey]; exists {
 			continue
 		}

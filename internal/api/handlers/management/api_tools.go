@@ -630,16 +630,30 @@ func directAPICallTransport() http.RoundTripper {
 type apiKeyConfigEntry interface {
 	GetAPIKey() string
 	GetBaseURL() string
+	GetCommandAuth() *config.CommandAuthConfig
 }
 
 func resolveAPIKeyConfig[T apiKeyConfigEntry](entries []T, auth *coreauth.Auth) *T {
 	if auth == nil || len(entries) == 0 {
 		return nil
 	}
-	attrKey, attrBase := "", ""
+	attrKey, attrBase, attrCommandKey := "", "", ""
 	if auth.Attributes != nil {
 		attrKey = strings.TrimSpace(auth.Attributes["api_key"])
 		attrBase = strings.TrimSpace(auth.Attributes["base_url"])
+		attrCommandKey = strings.TrimSpace(auth.Attributes[coreauth.AttrAuthCommandKey])
+	}
+	if attrCommandKey != "" {
+		for i := range entries {
+			entry := &entries[i]
+			cfgCommandKey := config.CommandAuthIdentity((*entry).GetCommandAuth())
+			cfgBase := strings.TrimSpace((*entry).GetBaseURL())
+			if cfgCommandKey != "" && strings.EqualFold(attrCommandKey, cfgCommandKey) {
+				if cfgBase == "" || strings.EqualFold(cfgBase, attrBase) {
+					return entry
+				}
+			}
+		}
 	}
 	for i := range entries {
 		entry := &entries[i]
@@ -676,7 +690,7 @@ func proxyURLFromAPIKeyConfig(cfg *config.Config, auth *coreauth.Auth) string {
 		return ""
 	}
 	authKind, authAccount := auth.AccountInfo()
-	if !strings.EqualFold(strings.TrimSpace(authKind), "api_key") {
+	if !strings.EqualFold(strings.TrimSpace(authKind), "api_key") && !coreauth.IsCommandAuth(auth) {
 		return ""
 	}
 
@@ -688,6 +702,9 @@ func proxyURLFromAPIKeyConfig(cfg *config.Config, auth *coreauth.Auth) string {
 		providerKey = strings.TrimSpace(attrs["provider_key"])
 	}
 	if compatName != "" || strings.EqualFold(strings.TrimSpace(auth.Provider), "openai-compatibility") {
+		if coreauth.IsCommandAuth(auth) {
+			return resolveOpenAICompatCommandAuthProxyURL(cfg, auth, providerKey, compatName)
+		}
 		return resolveOpenAICompatAPIKeyProxyURL(cfg, auth, strings.TrimSpace(authAccount), providerKey, compatName)
 	}
 
@@ -714,6 +731,14 @@ func proxyURLFromAPIKeyConfig(cfg *config.Config, auth *coreauth.Auth) string {
 		}
 	}
 	return ""
+}
+
+func resolveOpenAICompatCommandAuthProxyURL(cfg *config.Config, auth *coreauth.Auth, providerKey, compatName string) string {
+	entry := resolveOpenAICompatConfigForAuth(cfg, auth, providerKey, compatName)
+	if entry == nil {
+		return ""
+	}
+	return strings.TrimSpace(entry.ProxyURL)
 }
 
 func resolveOpenAICompatAPIKeyProxyURL(cfg *config.Config, auth *coreauth.Auth, apiKey, providerKey, compatName string) string {
@@ -753,6 +778,34 @@ func resolveOpenAICompatAPIKeyProxyURL(cfg *config.Config, auth *coreauth.Auth, 
 		}
 	}
 	return ""
+}
+
+func resolveOpenAICompatConfigForAuth(cfg *config.Config, auth *coreauth.Auth, providerKey, compatName string) *config.OpenAICompatibility {
+	if cfg == nil || auth == nil {
+		return nil
+	}
+	candidates := make([]string, 0, 3)
+	if v := strings.TrimSpace(compatName); v != "" {
+		candidates = append(candidates, v)
+	}
+	if v := strings.TrimSpace(providerKey); v != "" {
+		candidates = append(candidates, v)
+	}
+	if v := strings.TrimSpace(auth.Provider); v != "" {
+		candidates = append(candidates, v)
+	}
+	for i := range cfg.OpenAICompatibility {
+		compat := &cfg.OpenAICompatibility[i]
+		if compat.Disabled {
+			continue
+		}
+		for _, candidate := range candidates {
+			if candidate != "" && strings.EqualFold(strings.TrimSpace(candidate), compat.Name) {
+				return compat
+			}
+		}
+	}
+	return nil
 }
 
 func buildProxyTransport(proxyStr string) *http.Transport {

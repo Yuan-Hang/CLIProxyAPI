@@ -79,13 +79,14 @@ func (s *ConfigSynthesizer) synthesizeGeminiKeyEntries(ctx *SynthesisContext, en
 	for i := range entries {
 		entry := entries[i]
 		key := strings.TrimSpace(entry.APIKey)
-		if key == "" {
+		hasCommandAuth := entry.Auth != nil && strings.TrimSpace(entry.Auth.Command) != ""
+		if key == "" && !hasCommandAuth {
 			continue
 		}
 		prefix := strings.TrimSpace(entry.Prefix)
 		base := strings.TrimSpace(entry.BaseURL)
 		proxyURL := strings.TrimSpace(entry.ProxyURL)
-		id, token := idGen.Next(idKind, key, base)
+		id, token := idGen.Next(idKind, commandAuthIDPartsOrAPIKey(entry.Auth, key, base)...)
 		attrs := map[string]string{
 			"source":       fmt.Sprintf("config:%s[%s]", sourceName, token),
 			"api_key":      key,
@@ -109,7 +110,7 @@ func (s *ConfigSynthesizer) synthesizeGeminiKeyEntries(ctx *SynthesisContext, en
 		a := &coreauth.Auth{
 			ID:         id,
 			Provider:   provider,
-			Label:      label,
+			Label:      credentialLabelValue,
 			Prefix:     prefix,
 			Status:     coreauth.StatusActive,
 			ProxyURL:   proxyURL,
@@ -137,17 +138,22 @@ func (s *ConfigSynthesizer) synthesizeClaudeKeys(ctx *SynthesisContext) []*corea
 	for i := range cfg.ClaudeKey {
 		ck := cfg.ClaudeKey[i]
 		key := strings.TrimSpace(ck.APIKey)
-		if key == "" {
+		hasCommandAuth := ck.Auth != nil && strings.TrimSpace(ck.Auth.Command) != ""
+		if key == "" && !hasCommandAuth {
 			continue
 		}
 		prefix := strings.TrimSpace(ck.Prefix)
 		base := strings.TrimSpace(ck.BaseURL)
-		id, token := idGen.Next("claude:apikey", key, base)
+		id, token := idGen.Next("claude:apikey", commandAuthIDPartsOrAPIKey(ck.Auth, key, base)...)
 		attrs := map[string]string{
 			"source":       fmt.Sprintf("config:claude[%s]", token),
 			"api_key":      key,
 			"config_index": strconv.Itoa(i),
 		}
+		if key != "" {
+			attrs["api_key"] = key
+		}
+		addCommandAuthToAttrs(ck.Auth, attrs)
 		metadata := map[string]any{}
 		if ck.DisableCooling {
 			metadata["disable_cooling"] = true
@@ -170,7 +176,7 @@ func (s *ConfigSynthesizer) synthesizeClaudeKeys(ctx *SynthesisContext) []*corea
 		a := &coreauth.Auth{
 			ID:         id,
 			Provider:   "claude",
-			Label:      "claude-apikey",
+			Label:      credentialLabel("claude", hasCommandAuth),
 			Prefix:     prefix,
 			Status:     coreauth.StatusActive,
 			ProxyURL:   proxyURL,
@@ -433,16 +439,21 @@ func (s *ConfigSynthesizer) synthesizeVertexCompat(ctx *SynthesisContext) []*cor
 		base := strings.TrimSpace(compat.BaseURL)
 
 		key := strings.TrimSpace(compat.APIKey)
+		hasCommandAuth := compat.Auth != nil && strings.TrimSpace(compat.Auth.Command) != ""
+		if key == "" && !hasCommandAuth {
+			continue
+		}
 		prefix := strings.TrimSpace(compat.Prefix)
 		proxyURL := strings.TrimSpace(compat.ProxyURL)
 		idKind := "vertex:apikey"
-		id, token := idGen.Next(idKind, key, base, proxyURL)
+		id, token := idGen.Next(idKind, commandAuthIDPartsOrAPIKey(compat.Auth, key, base, proxyURL)...)
 		attrs := map[string]string{
 			"source":       fmt.Sprintf("config:vertex-apikey[%s]", token),
 			"base_url":     base,
 			"provider_key": providerName,
 			"config_index": strconv.Itoa(i),
 		}
+		addCommandAuthToAttrs(compat.Auth, attrs)
 		if compat.Priority != 0 {
 			attrs["priority"] = strconv.Itoa(compat.Priority)
 		}
@@ -457,7 +468,7 @@ func (s *ConfigSynthesizer) synthesizeVertexCompat(ctx *SynthesisContext) []*cor
 		a := &coreauth.Auth{
 			ID:         id,
 			Provider:   providerName,
-			Label:      "vertex-apikey",
+			Label:      credentialLabel("vertex", hasCommandAuth),
 			Prefix:     prefix,
 			Status:     coreauth.StatusActive,
 			ProxyURL:   proxyURL,
