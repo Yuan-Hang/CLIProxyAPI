@@ -6,21 +6,28 @@ import (
 
 	"github.com/router-for-me/CLIProxyAPI/v7/internal/config"
 	"github.com/router-for-me/CLIProxyAPI/v7/internal/watcher/synthesizer"
+	coreauth "github.com/router-for-me/CLIProxyAPI/v7/sdk/cliproxy/auth"
 )
 
 type geminiKeyWithAuthIndex struct {
 	config.GeminiKey
-	AuthIndex string `json:"auth-index,omitempty"`
+	AuthIndex  string `json:"auth-index,omitempty"`
+	AuthKey    string `json:"auth-key,omitempty"`
+	AuthSource string `json:"auth-source,omitempty"`
 }
 
 type claudeKeyWithAuthIndex struct {
 	config.ClaudeKey
-	AuthIndex string `json:"auth-index,omitempty"`
+	AuthIndex  string `json:"auth-index,omitempty"`
+	AuthKey    string `json:"auth-key,omitempty"`
+	AuthSource string `json:"auth-source,omitempty"`
 }
 
 type codexKeyWithAuthIndex struct {
 	config.CodexKey
-	AuthIndex string `json:"auth-index,omitempty"`
+	AuthIndex  string `json:"auth-index,omitempty"`
+	AuthKey    string `json:"auth-key,omitempty"`
+	AuthSource string `json:"auth-source,omitempty"`
 }
 
 type xaiKeyWithAuthIndex struct {
@@ -30,12 +37,16 @@ type xaiKeyWithAuthIndex struct {
 
 type vertexCompatKeyWithAuthIndex struct {
 	config.VertexCompatKey
-	AuthIndex string `json:"auth-index,omitempty"`
+	AuthIndex  string `json:"auth-index,omitempty"`
+	AuthKey    string `json:"auth-key,omitempty"`
+	AuthSource string `json:"auth-source,omitempty"`
 }
 
 type openAICompatibilityAPIKeyWithAuthIndex struct {
 	config.OpenAICompatibilityAPIKey
-	AuthIndex string `json:"auth-index,omitempty"`
+	AuthIndex  string `json:"auth-index,omitempty"`
+	AuthKey    string `json:"auth-key,omitempty"`
+	AuthSource string `json:"auth-source,omitempty"`
 }
 
 type openAICompatibilityWithAuthIndex struct {
@@ -84,6 +95,22 @@ func (h *Handler) liveAuthIndexByID() map[string]string {
 	return out
 }
 
+func commandAuthConfigManagementKey(auth *config.CommandAuthConfig) string {
+	return commandAuthManagementKey(config.CommandAuthIdentity(auth))
+}
+
+func isCommandAuthAPIKey(value string) bool {
+	return strings.HasPrefix(strings.TrimSpace(value), "auth-command:")
+}
+
+func clearCommandAuthAPIKey(apiKey string, auth *config.CommandAuthConfig) string {
+	apiKey = strings.TrimSpace(apiKey)
+	if auth != nil && isCommandAuthAPIKey(apiKey) {
+		return ""
+	}
+	return apiKey
+}
+
 func (h *Handler) geminiKeysWithAuthIndex() []geminiKeyWithAuthIndex {
 	if h == nil {
 		return nil
@@ -101,6 +128,8 @@ func (h *Handler) geminiKeysWithAuthIndex() []geminiKeyWithAuthIndex {
 	for i := range h.cfg.GeminiKey {
 		entry := h.cfg.GeminiKey[i]
 		authIndex := ""
+		authKey := ""
+		authSource := ""
 		if key := strings.TrimSpace(entry.APIKey); key != "" {
 			id, _ := idGen.Next("gemini:apikey", key, entry.BaseURL)
 			authIndex = liveIndexByID[id]
@@ -108,10 +137,14 @@ func (h *Handler) geminiKeysWithAuthIndex() []geminiKeyWithAuthIndex {
 			idParts := append(synthesizer.CommandAuthIDParts(entry.Auth), entry.BaseURL)
 			id, _ := idGen.Next("gemini:apikey", idParts...)
 			authIndex = liveIndexByID[id]
+			authKey = commandAuthConfigManagementKey(entry.Auth)
+			authSource = coreauth.AttrAuthSourceCommand
 		}
 		out[i] = geminiKeyWithAuthIndex{
-			GeminiKey: entry,
-			AuthIndex: authIndex,
+			GeminiKey:  entry,
+			AuthIndex:  authIndex,
+			AuthKey:    authKey,
+			AuthSource: authSource,
 		}
 	}
 	return out
@@ -163,6 +196,8 @@ func (h *Handler) claudeKeysWithAuthIndex() []claudeKeyWithAuthIndex {
 	for i := range h.cfg.ClaudeKey {
 		entry := h.cfg.ClaudeKey[i]
 		authIndex := ""
+		authKey := ""
+		authSource := ""
 		if key := strings.TrimSpace(entry.APIKey); key != "" {
 			id, _ := idGen.Next("claude:apikey", key, entry.BaseURL)
 			authIndex = liveIndexByID[id]
@@ -170,10 +205,14 @@ func (h *Handler) claudeKeysWithAuthIndex() []claudeKeyWithAuthIndex {
 			idParts := append(synthesizer.CommandAuthIDParts(entry.Auth), entry.BaseURL)
 			id, _ := idGen.Next("claude:apikey", idParts...)
 			authIndex = liveIndexByID[id]
+			authKey = commandAuthConfigManagementKey(entry.Auth)
+			authSource = coreauth.AttrAuthSourceCommand
 		}
 		out[i] = claudeKeyWithAuthIndex{
-			ClaudeKey: entry,
-			AuthIndex: authIndex,
+			ClaudeKey:  entry,
+			AuthIndex:  authIndex,
+			AuthKey:    authKey,
+			AuthSource: authSource,
 		}
 	}
 	return out
@@ -196,6 +235,8 @@ func (h *Handler) codexKeysWithAuthIndex() []codexKeyWithAuthIndex {
 	for i := range h.cfg.CodexKey {
 		entry := h.cfg.CodexKey[i]
 		authIndex := ""
+		authKey := ""
+		authSource := ""
 		if key := strings.TrimSpace(entry.APIKey); key != "" {
 			id, _ := idGen.Next("codex:apikey", key, entry.BaseURL)
 			authIndex = liveIndexByID[id]
@@ -203,10 +244,14 @@ func (h *Handler) codexKeysWithAuthIndex() []codexKeyWithAuthIndex {
 			idParts := append(synthesizer.CommandAuthIDParts(entry.Auth), entry.BaseURL)
 			id, _ := idGen.Next("codex:apikey", idParts...)
 			authIndex = liveIndexByID[id]
+			authKey = commandAuthConfigManagementKey(entry.Auth)
+			authSource = coreauth.AttrAuthSourceCommand
 		}
 		out[i] = codexKeyWithAuthIndex{
-			CodexKey:  entry,
-			AuthIndex: authIndex,
+			CodexKey:   entry,
+			AuthIndex:  authIndex,
+			AuthKey:    authKey,
+			AuthSource: authSource,
 		}
 	}
 	return out
@@ -258,16 +303,22 @@ func (h *Handler) vertexCompatKeysWithAuthIndex() []vertexCompatKeyWithAuthIndex
 	for i := range h.cfg.VertexCompatAPIKey {
 		entry := h.cfg.VertexCompatAPIKey[i]
 		var id string
+		authKey := ""
+		authSource := ""
 		if strings.TrimSpace(entry.APIKey) != "" {
 			id, _ = idGen.Next("vertex:apikey", entry.APIKey, entry.BaseURL, entry.ProxyURL)
 		} else if entry.Auth != nil && strings.TrimSpace(entry.Auth.Command) != "" {
 			idParts := append(synthesizer.CommandAuthIDParts(entry.Auth), entry.BaseURL, strings.TrimSpace(entry.ProxyURL))
 			id, _ = idGen.Next("vertex:apikey", idParts...)
+			authKey = commandAuthConfigManagementKey(entry.Auth)
+			authSource = coreauth.AttrAuthSourceCommand
 		}
 		authIndex := liveIndexByID[id]
 		out[i] = vertexCompatKeyWithAuthIndex{
 			VertexCompatKey: entry,
 			AuthIndex:       authIndex,
+			AuthKey:         authKey,
+			AuthSource:      authSource,
 		}
 	}
 	return out
@@ -312,6 +363,8 @@ func (h *Handler) openAICompatibilityWithAuthIndex() []openAICompatibilityWithAu
 			idParts := append(synthesizer.CommandAuthIDParts(entry.Auth), entry.BaseURL, strings.TrimSpace(entry.ProxyURL))
 			id, _ := idGen.Next(idKind, idParts...)
 			response.AuthIndex = liveIndexByID[id]
+			response.AuthKey = commandAuthConfigManagementKey(entry.Auth)
+			response.AuthSource = coreauth.AttrAuthSourceCommand
 		} else if len(entry.APIKeyEntries) == 0 {
 			id, _ := idGen.Next(idKind, entry.BaseURL)
 			response.AuthIndex = liveIndexByID[id]
