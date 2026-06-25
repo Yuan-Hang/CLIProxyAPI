@@ -283,7 +283,8 @@ func (s *ConfigSynthesizer) synthesizeOpenAICompat(ctx *SynthesisContext) []*cor
 	out := make([]*coreauth.Auth, 0)
 	for i := range cfg.OpenAICompatibility {
 		compat := &cfg.OpenAICompatibility[i]
-		if compat.Disabled {
+		hasCommandAuth := compat.Auth != nil && strings.TrimSpace(compat.Auth.Command) != ""
+		if compat.Disabled && !hasCommandAuth {
 			continue
 		}
 		prefix := strings.TrimSpace(compat.Prefix)
@@ -295,7 +296,7 @@ func (s *ConfigSynthesizer) synthesizeOpenAICompat(ctx *SynthesisContext) []*cor
 		base := strings.TrimSpace(compat.BaseURL)
 		disableCooling := compat.DisableCooling
 
-		if compat.Auth != nil && strings.TrimSpace(compat.Auth.Command) != "" {
+		if hasCommandAuth {
 			idKind := fmt.Sprintf("openai-compatibility:%s", providerName)
 			idParts := append(CommandAuthIDParts(compat.Auth), base, strings.TrimSpace(compat.ProxyURL))
 			id, token := idGen.Next(idKind, idParts...)
@@ -328,6 +329,10 @@ func (s *ConfigSynthesizer) synthesizeOpenAICompat(ctx *SynthesisContext) []*cor
 				Metadata:   metadata,
 				CreatedAt:  now,
 				UpdatedAt:  now,
+			}
+			if compat.Disabled {
+				a.Disabled = true
+				a.Status = coreauth.StatusDisabled
 			}
 			if len(a.Metadata) == 0 {
 				a.Metadata = nil
