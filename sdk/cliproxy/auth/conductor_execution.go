@@ -1247,6 +1247,13 @@ func (m *Manager) PrepareHttpRequest(ctx context.Context, auth *Auth, req *http.
 	if exec == nil {
 		return &Error{Code: "provider_not_found", Message: "executor not registered for provider: " + providerKey}
 	}
+	preparedAuth, errPrepareAuth := m.prepareRequestAuth(ctx, exec, auth)
+	if errPrepareAuth != nil {
+		return errPrepareAuth
+	}
+	if preparedAuth != nil {
+		auth = preparedAuth
+	}
 	preparer, ok := exec.(RequestPreparer)
 	if !ok || preparer == nil {
 		return &Error{Code: "not_supported", Message: "executor does not support http request preparation"}
@@ -1298,6 +1305,13 @@ func (m *Manager) HttpRequest(ctx context.Context, auth *Auth, req *http.Request
 	exec := m.executorFor(providerKey)
 	if exec == nil {
 		return nil, &Error{Code: "provider_not_found", Message: "executor not registered for provider: " + providerKey}
+	}
+	preparedAuth, errPrepareAuth := m.prepareRequestAuth(ctx, exec, auth)
+	if errPrepareAuth != nil {
+		return nil, errPrepareAuth
+	}
+	if preparedAuth != nil {
+		auth = preparedAuth
 	}
 	return exec.HttpRequest(ctx, auth, req)
 }

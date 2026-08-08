@@ -32,7 +32,9 @@ type codexKeyWithAuthIndex struct {
 
 type xaiKeyWithAuthIndex struct {
 	config.XAIKey
-	AuthIndex string `json:"auth-index,omitempty"`
+	AuthIndex  string `json:"auth-index,omitempty"`
+	AuthKey    string `json:"auth-key,omitempty"`
+	AuthSource string `json:"auth-source,omitempty"`
 }
 
 type vertexCompatKeyWithAuthIndex struct {
@@ -55,12 +57,55 @@ type openAICompatibilityWithAuthIndex struct {
 	Disabled              bool                                     `json:"disabled"`
 	Prefix                string                                   `json:"prefix,omitempty"`
 	BaseURL               string                                   `json:"base-url"`
+	ProxyURL              string                                   `json:"proxy-url,omitempty"`
+	Auth                  *config.CommandAuthConfig                `json:"auth,omitempty"`
 	APIKeyEntries         []openAICompatibilityAPIKeyWithAuthIndex `json:"api-key-entries,omitempty"`
 	Models                []config.OpenAICompatibilityModel        `json:"models,omitempty"`
 	Headers               map[string]string                        `json:"headers,omitempty"`
 	SupportPromptCacheKey bool                                     `json:"support-prompt-cache-key,omitempty"`
 	DisableCooling        bool                                     `json:"disable-cooling,omitempty"`
 	AuthIndex             string                                   `json:"auth-index,omitempty"`
+	AuthKey               string                                   `json:"auth-key,omitempty"`
+	AuthSource            string                                   `json:"auth-source,omitempty"`
+}
+
+type configWithAuthMetadata struct {
+	config.Config
+	GeminiKey           []geminiKeyWithAuthIndex           `json:"gemini-api-key"`
+	InteractionsKey     []geminiKeyWithAuthIndex           `json:"interactions-api-key"`
+	CodexKey            []codexKeyWithAuthIndex            `json:"codex-api-key"`
+	XAIKey              []xaiKeyWithAuthIndex              `json:"xai-api-key"`
+	ClaudeKey           []claudeKeyWithAuthIndex           `json:"claude-api-key"`
+	VertexCompatAPIKey  []vertexCompatKeyWithAuthIndex     `json:"vertex-api-key"`
+	OpenAICompatibility []openAICompatibilityWithAuthIndex `json:"openai-compatibility"`
+}
+
+func (h *Handler) managementConfigSnapshot() configWithAuthMetadata {
+	if h == nil {
+		return configWithAuthMetadata{}
+	}
+	h.mu.Lock()
+	var base *config.Config
+	manager := h.authManager
+	if h.cfg != nil {
+		base = h.cfg.CloneForRuntime()
+	}
+	h.mu.Unlock()
+	if base == nil {
+		base = &config.Config{}
+	}
+
+	snapshotHandler := &Handler{cfg: base, authManager: manager}
+	return configWithAuthMetadata{
+		Config:              *base,
+		GeminiKey:           snapshotHandler.geminiKeysWithAuthIndex(),
+		InteractionsKey:     snapshotHandler.interactionsKeysWithAuthIndex(),
+		CodexKey:            snapshotHandler.codexKeysWithAuthIndex(),
+		XAIKey:              snapshotHandler.xaiKeysWithAuthIndex(),
+		ClaudeKey:           snapshotHandler.claudeKeysWithAuthIndex(),
+		VertexCompatAPIKey:  snapshotHandler.vertexCompatKeysWithAuthIndex(),
+		OpenAICompatibility: snapshotHandler.openAICompatibilityWithAuthIndex(),
+	}
 }
 
 func (h *Handler) liveAuthIndexByID() map[string]string {
@@ -167,13 +212,23 @@ func (h *Handler) interactionsKeysWithAuthIndex() []geminiKeyWithAuthIndex {
 	for i := range h.cfg.InteractionsKey {
 		entry := h.cfg.InteractionsKey[i]
 		authIndex := ""
+		authKey := ""
+		authSource := ""
 		if key := strings.TrimSpace(entry.APIKey); key != "" {
 			id, _ := idGen.Next("gemini-interactions:apikey", key, entry.BaseURL)
 			authIndex = liveIndexByID[id]
+		} else if entry.Auth != nil && strings.TrimSpace(entry.Auth.Command) != "" {
+			idParts := append(synthesizer.CommandAuthIDParts(entry.Auth), entry.BaseURL)
+			id, _ := idGen.Next("gemini-interactions:apikey", idParts...)
+			authIndex = liveIndexByID[id]
+			authKey = commandAuthConfigManagementKey(entry.Auth)
+			authSource = coreauth.AttrAuthSourceCommand
 		}
 		out[i] = geminiKeyWithAuthIndex{
-			GeminiKey: entry,
-			AuthIndex: authIndex,
+			GeminiKey:  entry,
+			AuthIndex:  authIndex,
+			AuthKey:    authKey,
+			AuthSource: authSource,
 		}
 	}
 	return out
@@ -274,13 +329,23 @@ func (h *Handler) xaiKeysWithAuthIndex() []xaiKeyWithAuthIndex {
 	for i := range h.cfg.XAIKey {
 		entry := h.cfg.XAIKey[i]
 		authIndex := ""
+		authKey := ""
+		authSource := ""
 		if key := strings.TrimSpace(entry.APIKey); key != "" {
 			id, _ := idGen.Next("xai:apikey", key, entry.BaseURL)
 			authIndex = liveIndexByID[id]
+		} else if entry.Auth != nil && strings.TrimSpace(entry.Auth.Command) != "" {
+			idParts := append(synthesizer.CommandAuthIDParts(entry.Auth), entry.BaseURL)
+			id, _ := idGen.Next("xai:apikey", idParts...)
+			authIndex = liveIndexByID[id]
+			authKey = commandAuthConfigManagementKey(entry.Auth)
+			authSource = coreauth.AttrAuthSourceCommand
 		}
 		out[i] = xaiKeyWithAuthIndex{
-			XAIKey:    entry,
-			AuthIndex: authIndex,
+			XAIKey:     entry,
+			AuthIndex:  authIndex,
+			AuthKey:    authKey,
+			AuthSource: authSource,
 		}
 	}
 	return out
@@ -353,6 +418,8 @@ func (h *Handler) openAICompatibilityWithAuthIndex() []openAICompatibilityWithAu
 			Disabled:              entry.Disabled,
 			Prefix:                entry.Prefix,
 			BaseURL:               entry.BaseURL,
+			ProxyURL:              entry.ProxyURL,
+			Auth:                  entry.Auth,
 			Models:                entry.Models,
 			Headers:               entry.Headers,
 			SupportPromptCacheKey: entry.SupportPromptCacheKey,

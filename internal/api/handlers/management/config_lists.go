@@ -185,13 +185,14 @@ func (h *Handler) PutGeminiKeys(c *gin.Context) {
 }
 func (h *Handler) PatchGeminiKey(c *gin.Context) {
 	type geminiKeyPatch struct {
-		APIKey         *string            `json:"api-key"`
-		Weight         json.RawMessage    `json:"weight"`
-		Prefix         *string            `json:"prefix"`
-		BaseURL        *string            `json:"base-url"`
-		ProxyURL       *string            `json:"proxy-url"`
-		Headers        *map[string]string `json:"headers"`
-		ExcludedModels *[]string          `json:"excluded-models"`
+		APIKey         *string                   `json:"api-key"`
+		Auth           *config.CommandAuthConfig `json:"auth"`
+		Weight         json.RawMessage           `json:"weight"`
+		Prefix         *string                   `json:"prefix"`
+		BaseURL        *string                   `json:"base-url"`
+		ProxyURL       *string                   `json:"proxy-url"`
+		Headers        *map[string]string        `json:"headers"`
+		ExcludedModels *[]string                 `json:"excluded-models"`
 	}
 	var body struct {
 		Index *int            `json:"index"`
@@ -361,19 +362,26 @@ func (h *Handler) PutInteractionsKeys(c *gin.Context) {
 	}
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	h.cfg.InteractionsKey = append([]config.GeminiKey(nil), arr...)
+	old := cloneGeminiKeys(h.cfg.InteractionsKey)
+	h.cfg.InteractionsKey = cloneGeminiKeys(arr)
 	h.cfg.SanitizeInteractionsKeys()
+	if errValidate := h.cfg.ValidateCommandAuthConfig(); errValidate != nil {
+		h.cfg.InteractionsKey = old
+		c.JSON(400, gin.H{"error": errValidate.Error()})
+		return
+	}
 	h.persistLocked(c)
 }
 func (h *Handler) PatchInteractionsKey(c *gin.Context) {
 	type geminiKeyPatch struct {
-		APIKey         *string            `json:"api-key"`
-		Weight         json.RawMessage    `json:"weight"`
-		Prefix         *string            `json:"prefix"`
-		BaseURL        *string            `json:"base-url"`
-		ProxyURL       *string            `json:"proxy-url"`
-		Headers        *map[string]string `json:"headers"`
-		ExcludedModels *[]string          `json:"excluded-models"`
+		APIKey         *string                   `json:"api-key"`
+		Auth           *config.CommandAuthConfig `json:"auth"`
+		Weight         json.RawMessage           `json:"weight"`
+		Prefix         *string                   `json:"prefix"`
+		BaseURL        *string                   `json:"base-url"`
+		ProxyURL       *string                   `json:"proxy-url"`
+		Headers        *map[string]string        `json:"headers"`
+		ExcludedModels *[]string                 `json:"excluded-models"`
 	}
 	var body struct {
 		Index *int            `json:"index"`
@@ -410,14 +418,16 @@ func (h *Handler) PatchInteractionsKey(c *gin.Context) {
 
 	entry := h.cfg.InteractionsKey[targetIndex]
 	if body.Value.APIKey != nil {
-		trimmed := strings.TrimSpace(*body.Value.APIKey)
-		if trimmed == "" {
-			h.cfg.InteractionsKey = append(h.cfg.InteractionsKey[:targetIndex], h.cfg.InteractionsKey[targetIndex+1:]...)
-			h.cfg.SanitizeInteractionsKeys()
-			h.persistLocked(c)
-			return
-		}
-		entry.APIKey = trimmed
+		entry.APIKey = strings.TrimSpace(*body.Value.APIKey)
+	}
+	if body.Value.Auth != nil {
+		entry.Auth = commandAuthFromPatch(body.Value.Auth)
+	}
+	if body.Value.APIKey != nil && entry.APIKey == "" && entry.Auth == nil {
+		h.cfg.InteractionsKey = append(h.cfg.InteractionsKey[:targetIndex], h.cfg.InteractionsKey[targetIndex+1:]...)
+		h.cfg.SanitizeInteractionsKeys()
+		h.persistLocked(c)
+		return
 	}
 	if len(body.Value.Weight) > 0 {
 		weight, errWeight := parseCredentialWeightPatch(body.Value.Weight)
@@ -442,8 +452,15 @@ func (h *Handler) PatchInteractionsKey(c *gin.Context) {
 	if body.Value.ExcludedModels != nil {
 		entry.ExcludedModels = config.NormalizeExcludedModels(*body.Value.ExcludedModels)
 	}
+	normalizeGeminiKey(&entry)
+	old := cloneGeminiKeys(h.cfg.InteractionsKey)
 	h.cfg.InteractionsKey[targetIndex] = entry
 	h.cfg.SanitizeInteractionsKeys()
+	if errValidate := h.cfg.ValidateCommandAuthConfig(); errValidate != nil {
+		h.cfg.InteractionsKey = old
+		c.JSON(400, gin.H{"error": errValidate.Error()})
+		return
+	}
 	h.persistLocked(c)
 }
 
@@ -547,15 +564,16 @@ func (h *Handler) PutClaudeKeys(c *gin.Context) {
 }
 func (h *Handler) PatchClaudeKey(c *gin.Context) {
 	type claudeKeyPatch struct {
-		APIKey                  *string               `json:"api-key"`
-		Weight                  json.RawMessage       `json:"weight"`
-		Prefix                  *string               `json:"prefix"`
-		BaseURL                 *string               `json:"base-url"`
-		ProxyURL                *string               `json:"proxy-url"`
-		Models                  *[]config.ClaudeModel `json:"models"`
-		Headers                 *map[string]string    `json:"headers"`
-		ExcludedModels          *[]string             `json:"excluded-models"`
-		RebuildMidSystemMessage *bool                 `json:"rebuild-mid-system-message"`
+		APIKey                  *string                   `json:"api-key"`
+		Auth                    *config.CommandAuthConfig `json:"auth"`
+		Weight                  json.RawMessage           `json:"weight"`
+		Prefix                  *string                   `json:"prefix"`
+		BaseURL                 *string                   `json:"base-url"`
+		ProxyURL                *string                   `json:"proxy-url"`
+		Models                  *[]config.ClaudeModel     `json:"models"`
+		Headers                 *map[string]string        `json:"headers"`
+		ExcludedModels          *[]string                 `json:"excluded-models"`
+		RebuildMidSystemMessage *bool                     `json:"rebuild-mid-system-message"`
 	}
 	var body struct {
 		Index *int            `json:"index"`
@@ -590,6 +608,9 @@ func (h *Handler) PatchClaudeKey(c *gin.Context) {
 	entry := h.cfg.ClaudeKey[targetIndex]
 	if body.Value.APIKey != nil {
 		entry.APIKey = strings.TrimSpace(*body.Value.APIKey)
+	}
+	if body.Value.Auth != nil {
+		entry.Auth = commandAuthFromPatch(body.Value.Auth)
 	}
 	if len(body.Value.Weight) > 0 {
 		weight, errWeight := parseCredentialWeightPatch(body.Value.Weight)
@@ -739,6 +760,8 @@ func (h *Handler) PatchOpenAICompat(c *gin.Context) {
 		Disabled              *bool                               `json:"disabled"`
 		DisableCooling        *bool                               `json:"disable-cooling"`
 		BaseURL               *string                             `json:"base-url"`
+		ProxyURL              *string                             `json:"proxy-url"`
+		Auth                  *config.CommandAuthConfig           `json:"auth"`
 		APIKeyEntries         *[]config.OpenAICompatibilityAPIKey `json:"api-key-entries"`
 		Models                *[]config.OpenAICompatibilityModel  `json:"models"`
 		Headers               *map[string]string                  `json:"headers"`
@@ -913,6 +936,7 @@ func (h *Handler) PutVertexCompatKeys(c *gin.Context) {
 func (h *Handler) PatchVertexCompatKey(c *gin.Context) {
 	type vertexCompatPatch struct {
 		APIKey         *string                     `json:"api-key"`
+		Auth           *config.CommandAuthConfig   `json:"auth"`
 		Weight         json.RawMessage             `json:"weight"`
 		Prefix         *string                     `json:"prefix"`
 		BaseURL        *string                     `json:"base-url"`
@@ -1294,15 +1318,16 @@ func (h *Handler) PutCodexKeys(c *gin.Context) {
 }
 func (h *Handler) PatchCodexKey(c *gin.Context) {
 	type codexKeyPatch struct {
-		APIKey         *string              `json:"api-key"`
-		Weight         json.RawMessage      `json:"weight"`
-		Prefix         *string              `json:"prefix"`
-		BaseURL        *string              `json:"base-url"`
-		ProxyURL       *string              `json:"proxy-url"`
-		AlphaSearch    *bool                `json:"alpha-search"`
-		Models         *[]config.CodexModel `json:"models"`
-		Headers        *map[string]string   `json:"headers"`
-		ExcludedModels *[]string            `json:"excluded-models"`
+		APIKey         *string                   `json:"api-key"`
+		Auth           *config.CommandAuthConfig `json:"auth"`
+		Weight         json.RawMessage           `json:"weight"`
+		Prefix         *string                   `json:"prefix"`
+		BaseURL        *string                   `json:"base-url"`
+		ProxyURL       *string                   `json:"proxy-url"`
+		AlphaSearch    *bool                     `json:"alpha-search"`
+		Models         *[]config.CodexModel      `json:"models"`
+		Headers        *map[string]string        `json:"headers"`
+		ExcludedModels *[]string                 `json:"excluded-models"`
 	}
 	var body struct {
 		Index *int           `json:"index"`
@@ -1484,24 +1509,31 @@ func (h *Handler) PutXAIKeys(c *gin.Context) {
 	}
 	h.mu.Lock()
 	defer h.mu.Unlock()
+	old := cloneCodexKeys(h.cfg.XAIKey)
 	h.cfg.XAIKey = filtered
 	h.cfg.SanitizeXAIKeys()
+	if errValidate := h.cfg.ValidateCommandAuthConfig(); errValidate != nil {
+		h.cfg.XAIKey = old
+		c.JSON(400, gin.H{"error": errValidate.Error()})
+		return
+	}
 	h.persistLocked(c)
 }
 
 func (h *Handler) PatchXAIKey(c *gin.Context) {
 	type xaiKeyPatch struct {
-		APIKey         *string            `json:"api-key"`
-		Priority       *int               `json:"priority"`
-		Weight         json.RawMessage    `json:"weight"`
-		Prefix         *string            `json:"prefix"`
-		BaseURL        *string            `json:"base-url"`
-		Websockets     *bool              `json:"websockets"`
-		ProxyURL       *string            `json:"proxy-url"`
-		Models         *[]config.XAIModel `json:"models"`
-		Headers        *map[string]string `json:"headers"`
-		ExcludedModels *[]string          `json:"excluded-models"`
-		DisableCooling *bool              `json:"disable-cooling"`
+		APIKey         *string                   `json:"api-key"`
+		Auth           *config.CommandAuthConfig `json:"auth"`
+		Priority       *int                      `json:"priority"`
+		Weight         json.RawMessage           `json:"weight"`
+		Prefix         *string                   `json:"prefix"`
+		BaseURL        *string                   `json:"base-url"`
+		Websockets     *bool                     `json:"websockets"`
+		ProxyURL       *string                   `json:"proxy-url"`
+		Models         *[]config.XAIModel        `json:"models"`
+		Headers        *map[string]string        `json:"headers"`
+		ExcludedModels *[]string                 `json:"excluded-models"`
+		DisableCooling *bool                     `json:"disable-cooling"`
 	}
 	var body struct {
 		Index *int         `json:"index"`
@@ -1536,6 +1568,9 @@ func (h *Handler) PatchXAIKey(c *gin.Context) {
 	entry := h.cfg.XAIKey[targetIndex]
 	if body.Value.APIKey != nil {
 		entry.APIKey = strings.TrimSpace(*body.Value.APIKey)
+	}
+	if body.Value.Auth != nil {
+		entry.Auth = commandAuthFromPatch(body.Value.Auth)
 	}
 	if body.Value.Priority != nil {
 		entry.Priority = *body.Value.Priority
@@ -1580,8 +1615,14 @@ func (h *Handler) PatchXAIKey(c *gin.Context) {
 		entry.DisableCooling = *body.Value.DisableCooling
 	}
 	normalizeCodexKey(&entry)
+	old := cloneCodexKeys(h.cfg.XAIKey)
 	h.cfg.XAIKey[targetIndex] = entry
 	h.cfg.SanitizeXAIKeys()
+	if errValidate := h.cfg.ValidateCommandAuthConfig(); errValidate != nil {
+		h.cfg.XAIKey = old
+		c.JSON(400, gin.H{"error": errValidate.Error()})
+		return
+	}
 	h.persistLocked(c)
 }
 

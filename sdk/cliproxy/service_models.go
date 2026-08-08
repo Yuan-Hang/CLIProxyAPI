@@ -358,6 +358,20 @@ func configEntryForAuthIndex[T any](auth *coreauth.Auth, entries []T) *T {
 	return &entries[index]
 }
 
+func commandAuthConfigMatches(auth *coreauth.Auth, authConfig *config.CommandAuthConfig, baseURL string) bool {
+	if auth == nil || auth.Attributes == nil {
+		return false
+	}
+	attrCommandKey := strings.TrimSpace(auth.Attributes[coreauth.AttrAuthCommandKey])
+	cfgCommandKey := config.CommandAuthIdentity(authConfig)
+	if attrCommandKey == "" || cfgCommandKey == "" || !strings.EqualFold(attrCommandKey, cfgCommandKey) {
+		return false
+	}
+	baseURL = strings.TrimSpace(baseURL)
+	attrBase := strings.TrimSpace(auth.Attributes["base_url"])
+	return baseURL == "" || strings.EqualFold(baseURL, attrBase)
+}
+
 func (s *Service) resolveConfigClaudeKey(auth *coreauth.Auth) *config.ClaudeKey {
 	if auth == nil || s.cfg == nil {
 		return nil
@@ -374,6 +388,9 @@ func (s *Service) resolveConfigClaudeKey(auth *coreauth.Auth) *config.ClaudeKey 
 		entry := &s.cfg.ClaudeKey[i]
 		cfgKey := strings.TrimSpace(entry.APIKey)
 		cfgBase := strings.TrimSpace(entry.BaseURL)
+		if commandAuthConfigMatches(auth, entry.Auth, cfgBase) {
+			return entry
+		}
 		if attrKey != "" && attrBase != "" {
 			if strings.EqualFold(cfgKey, attrKey) && strings.EqualFold(cfgBase, attrBase) {
 				return entry
@@ -430,6 +447,9 @@ func (s *Service) resolveConfigGeminiKeyEntry(auth *coreauth.Auth, entries []con
 		entry := &entries[i]
 		cfgKey := strings.TrimSpace(entry.APIKey)
 		cfgBase := strings.TrimSpace(entry.BaseURL)
+		if commandAuthConfigMatches(auth, entry.Auth, cfgBase) {
+			return entry
+		}
 		if attrKey != "" && strings.EqualFold(cfgKey, attrKey) {
 			if cfgBase == "" || strings.EqualFold(cfgBase, attrBase) {
 				return entry
@@ -459,6 +479,9 @@ func (s *Service) resolveConfigVertexCompatKey(auth *coreauth.Auth) *config.Vert
 		entry := &s.cfg.VertexCompatAPIKey[i]
 		cfgKey := strings.TrimSpace(entry.APIKey)
 		cfgBase := strings.TrimSpace(entry.BaseURL)
+		if commandAuthConfigMatches(auth, entry.Auth, cfgBase) {
+			return entry
+		}
 		if attrKey != "" && strings.EqualFold(cfgKey, attrKey) {
 			if cfgBase == "" || strings.EqualFold(cfgBase, attrBase) {
 				return entry
@@ -509,6 +532,9 @@ func resolveConfigCodexStyleKey(auth *coreauth.Auth, entries []config.CodexKey, 
 		}
 		cfgKey := strings.TrimSpace(entry.APIKey)
 		cfgBase := strings.TrimSpace(entry.BaseURL)
+		if commandAuthConfigMatches(auth, entry.Auth, cfgBase) {
+			return true
+		}
 		if attrKey != "" {
 			return strings.EqualFold(cfgKey, attrKey) && (cfgBase == "" || strings.EqualFold(cfgBase, attrBase))
 		}

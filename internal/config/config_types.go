@@ -322,6 +322,10 @@ type ClaudeKey struct {
 	// APIKey is the authentication key for accessing Claude API services.
 	APIKey string `yaml:"api-key" json:"api-key"`
 
+	// Auth executes a command to obtain a token before upstream requests.
+	// Mutually exclusive with APIKey.
+	Auth *CommandAuthConfig `yaml:"auth,omitempty" json:"auth,omitempty"`
+
 	// Priority controls selection preference when multiple credentials match.
 	// Higher values are preferred; defaults to 0.
 	Priority int `yaml:"priority,omitempty" json:"priority,omitempty"`
@@ -371,6 +375,8 @@ func (k ClaudeKey) GetPrefix() string { return k.Prefix }
 
 func (k ClaudeKey) GetProxyURL() string { return k.ProxyURL }
 
+func (k ClaudeKey) GetCommandAuth() *CommandAuthConfig { return k.Auth }
+
 // ClaudeModel describes a mapping between an alias and the actual upstream model name.
 type ClaudeModel struct {
 	// Name is the upstream model identifier used when issuing requests.
@@ -413,6 +419,10 @@ func (m ClaudeModel) GetThinking() *registry.ThinkingSupport { return m.Thinking
 type CodexKey struct {
 	// APIKey is the authentication key for accessing Codex API services.
 	APIKey string `yaml:"api-key" json:"api-key"`
+
+	// Auth executes a command to obtain a bearer token before upstream requests.
+	// Mutually exclusive with APIKey.
+	Auth *CommandAuthConfig `yaml:"auth,omitempty" json:"auth,omitempty"`
 
 	// Priority controls selection preference when multiple credentials match.
 	// Higher values are preferred; defaults to 0.
@@ -458,6 +468,8 @@ func (k CodexKey) GetBaseURL() string { return k.BaseURL }
 func (k CodexKey) GetPrefix() string { return k.Prefix }
 
 func (k CodexKey) GetProxyURL() string { return k.ProxyURL }
+
+func (k CodexKey) GetCommandAuth() *CommandAuthConfig { return k.Auth }
 
 // CodexModel describes a mapping between an alias and the actual upstream model name.
 type CodexModel struct {
@@ -510,6 +522,10 @@ type GeminiKey struct {
 	// APIKey is the authentication key for accessing Gemini API services.
 	APIKey string `yaml:"api-key" json:"api-key"`
 
+	// Auth executes a command to obtain a token before upstream requests.
+	// Mutually exclusive with APIKey.
+	Auth *CommandAuthConfig `yaml:"auth,omitempty" json:"auth,omitempty"`
+
 	// Priority controls selection preference when multiple credentials match.
 	// Higher values are preferred; defaults to 0.
 	Priority int `yaml:"priority,omitempty" json:"priority,omitempty"`
@@ -547,6 +563,8 @@ func (k GeminiKey) GetBaseURL() string { return k.BaseURL }
 func (k GeminiKey) GetPrefix() string { return k.Prefix }
 
 func (k GeminiKey) GetProxyURL() string { return k.ProxyURL }
+
+func (k GeminiKey) GetCommandAuth() *CommandAuthConfig { return k.Auth }
 
 // GeminiModel describes a mapping between an alias and the actual upstream model name.
 type GeminiModel struct {
@@ -602,6 +620,13 @@ type OpenAICompatibility struct {
 
 	// BaseURL is the base URL for the external OpenAI-compatible API endpoint.
 	BaseURL string `yaml:"base-url" json:"base-url"`
+
+	// ProxyURL overrides the global proxy setting for command-auth providers if provided.
+	ProxyURL string `yaml:"proxy-url,omitempty" json:"proxy-url,omitempty"`
+
+	// Auth executes a command to obtain a bearer token before upstream requests.
+	// Mutually exclusive with non-empty APIKeyEntries.
+	Auth *CommandAuthConfig `yaml:"auth,omitempty" json:"auth,omitempty"`
 
 	// APIKeyEntries defines API keys with optional per-key proxy configuration.
 	APIKeyEntries []OpenAICompatibilityAPIKey `yaml:"api-key-entries,omitempty" json:"api-key-entries,omitempty"`

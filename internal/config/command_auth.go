@@ -403,6 +403,11 @@ func (cfg *Config) ValidateCommandAuthConfig() error {
 			return err
 		}
 	}
+	for i := range cfg.InteractionsKey {
+		if err := validateCommandAuthEntry(fmt.Sprintf("interactions-api-key[%d]", i), cfg.InteractionsKey[i]); err != nil {
+			return err
+		}
+	}
 	for i := range cfg.ClaudeKey {
 		if err := validateCommandAuthEntry(fmt.Sprintf("claude-api-key[%d]", i), cfg.ClaudeKey[i]); err != nil {
 			return err
@@ -410,6 +415,11 @@ func (cfg *Config) ValidateCommandAuthConfig() error {
 	}
 	for i := range cfg.CodexKey {
 		if err := validateCommandAuthEntry(fmt.Sprintf("codex-api-key[%d]", i), cfg.CodexKey[i]); err != nil {
+			return err
+		}
+	}
+	for i := range cfg.XAIKey {
+		if err := validateCommandAuthEntry(fmt.Sprintf("xai-api-key[%d]", i), cfg.XAIKey[i]); err != nil {
 			return err
 		}
 	}

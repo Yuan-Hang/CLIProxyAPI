@@ -20,6 +20,9 @@ const (
 type claudeOAuthProfileFetcher func(context.Context, *cliproxyauth.Auth, string) (*claudeauth.OAuthProfile, error)
 
 func (e *ClaudeExecutor) ShouldPrepareRequestAuth(auth *cliproxyauth.Auth) bool {
+	if helps.ShouldPrepareCommandAuth(auth) {
+		return true
+	}
 	apiKey, _ := claudeCreds(auth)
 	if !isClaudeOAuthToken(apiKey) || auth == nil {
 		return false
@@ -31,6 +34,9 @@ func (e *ClaudeExecutor) ShouldPrepareRequestAuth(auth *cliproxyauth.Auth) bool 
 }
 
 func (e *ClaudeExecutor) PrepareRequestAuth(ctx context.Context, auth *cliproxyauth.Auth) (*cliproxyauth.Auth, error) {
+	if helps.ShouldPrepareCommandAuth(auth) {
+		return helps.PrepareCommandAuth(ctx, auth)
+	}
 	if auth == nil || !e.ShouldPrepareRequestAuth(auth) {
 		return auth, nil
 	}
@@ -79,6 +85,9 @@ func (e *ClaudeExecutor) fetchClaudeOAuthProfile(ctx context.Context, auth *clip
 
 func (e *ClaudeExecutor) Refresh(ctx context.Context, auth *cliproxyauth.Auth) (*cliproxyauth.Auth, error) {
 	log.Debugf("claude executor: refresh called")
+	if helps.ShouldPrepareCommandAuth(auth) {
+		return helps.PrepareCommandAuth(ctx, auth)
+	}
 	if refreshed, handled, err := helps.RefreshAuthViaHome(ctx, e.cfg, auth); handled {
 		return refreshed, err
 	}

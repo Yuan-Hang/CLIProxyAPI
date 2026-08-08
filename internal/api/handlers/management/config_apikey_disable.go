@@ -57,7 +57,13 @@ func toggleConfigAPIKeyExcludedAll(cfg *config.Config, auth *coreauth.Auth, disa
 	}
 	for i := range cfg.InteractionsKey {
 		entry := &cfg.InteractionsKey[i]
-		id, _ := idGen.Next("gemini-interactions:apikey", entry.APIKey, entry.BaseURL)
+		var id string
+		if strings.TrimSpace(entry.APIKey) != "" {
+			id, _ = idGen.Next("gemini-interactions:apikey", entry.APIKey, entry.BaseURL)
+		} else if entry.Auth != nil && strings.TrimSpace(entry.Auth.Command) != "" {
+			idParts := append(synthesizer.CommandAuthIDParts(entry.Auth), entry.BaseURL)
+			id, _ = idGen.Next("gemini-interactions:apikey", idParts...)
+		}
 		if id == authID {
 			entry.ExcludedModels = setConfigAPIKeyExcludedAll(entry.ExcludedModels, disable)
 			return true, nil
@@ -91,9 +97,32 @@ func toggleConfigAPIKeyExcludedAll(cfg *config.Config, auth *coreauth.Auth, disa
 			return true, nil
 		}
 	}
+	for i := range cfg.OpenAICompatibility {
+		compat := &cfg.OpenAICompatibility[i]
+		if compat.Auth == nil || strings.TrimSpace(compat.Auth.Command) == "" {
+			continue
+		}
+		providerName := strings.ToLower(strings.TrimSpace(compat.Name))
+		if providerName == "" {
+			providerName = "openai-compatibility"
+		}
+		idKind := fmt.Sprintf("openai-compatibility:%s", providerName)
+		idParts := append(synthesizer.CommandAuthIDParts(compat.Auth), strings.TrimSpace(compat.BaseURL), strings.TrimSpace(compat.ProxyURL))
+		id, _ := idGen.Next(idKind, idParts...)
+		if id == authID {
+			compat.Disabled = disable
+			return true, nil
+		}
+	}
 	for i := range cfg.XAIKey {
 		entry := &cfg.XAIKey[i]
-		id, _ := idGen.Next("xai:apikey", entry.APIKey, entry.BaseURL)
+		var id string
+		if strings.TrimSpace(entry.APIKey) != "" {
+			id, _ = idGen.Next("xai:apikey", entry.APIKey, entry.BaseURL)
+		} else if entry.Auth != nil && strings.TrimSpace(entry.Auth.Command) != "" {
+			idParts := append(synthesizer.CommandAuthIDParts(entry.Auth), entry.BaseURL)
+			id, _ = idGen.Next("xai:apikey", idParts...)
+		}
 		if id == authID {
 			entry.ExcludedModels = setConfigAPIKeyExcludedAll(entry.ExcludedModels, disable)
 			return true, nil

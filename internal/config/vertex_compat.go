@@ -55,6 +55,9 @@ func (k VertexCompatKey) GetAPIKey() string   { return k.APIKey }
 func (k VertexCompatKey) GetBaseURL() string  { return k.BaseURL }
 func (k VertexCompatKey) GetPrefix() string   { return k.Prefix }
 func (k VertexCompatKey) GetProxyURL() string { return k.ProxyURL }
+func (k VertexCompatKey) GetCommandAuth() *CommandAuthConfig {
+	return k.Auth
+}
 
 // VertexCompatModel represents a model configuration for Vertex compatibility,
 // including the actual model name and its alias for API routing.

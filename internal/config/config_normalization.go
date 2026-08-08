@@ -114,7 +114,9 @@ func (cfg *Config) SanitizeOpenAICompatibility() {
 		e.Name = strings.TrimSpace(e.Name)
 		e.Prefix = normalizeModelPrefix(e.Prefix)
 		e.BaseURL = strings.TrimSpace(e.BaseURL)
+		e.ProxyURL = strings.TrimSpace(e.ProxyURL)
 		e.Headers = NormalizeHeaders(e.Headers)
+		normalizeCommandAuth(e.Auth)
 		if e.BaseURL == "" {
 			// Skip providers with no base-url; treated as removed
 			continue
@@ -156,6 +158,7 @@ func sanitizeCodexKeyEntries(entries []CodexKey) []CodexKey {
 		e.BaseURL = strings.TrimSpace(e.BaseURL)
 		e.Headers = NormalizeHeaders(e.Headers)
 		e.ExcludedModels = NormalizeExcludedModels(e.ExcludedModels)
+		normalizeCommandAuth(e.Auth)
 		if e.BaseURL == "" {
 			continue
 		}
@@ -171,9 +174,13 @@ func (cfg *Config) SanitizeClaudeKeys() {
 	}
 	for i := range cfg.ClaudeKey {
 		entry := &cfg.ClaudeKey[i]
+		entry.APIKey = strings.TrimSpace(entry.APIKey)
 		entry.Prefix = normalizeModelPrefix(entry.Prefix)
+		entry.BaseURL = strings.TrimSpace(entry.BaseURL)
+		entry.ProxyURL = strings.TrimSpace(entry.ProxyURL)
 		entry.Headers = NormalizeHeaders(entry.Headers)
 		entry.ExcludedModels = NormalizeExcludedModels(entry.ExcludedModels)
+		normalizeCommandAuth(entry.Auth)
 	}
 }
 
@@ -183,7 +190,8 @@ func sanitizeGeminiKeyEntries(entries []GeminiKey) []GeminiKey {
 	for i := range entries {
 		entry := entries[i]
 		entry.APIKey = strings.TrimSpace(entry.APIKey)
-		if entry.APIKey == "" {
+		normalizeCommandAuth(entry.Auth)
+		if entry.APIKey == "" && (entry.Auth == nil || strings.TrimSpace(entry.Auth.Command) == "") {
 			continue
 		}
 		entry.Prefix = normalizeModelPrefix(entry.Prefix)
@@ -192,6 +200,9 @@ func sanitizeGeminiKeyEntries(entries []GeminiKey) []GeminiKey {
 		entry.Headers = NormalizeHeaders(entry.Headers)
 		entry.ExcludedModels = NormalizeExcludedModels(entry.ExcludedModels)
 		uniqueKey := entry.APIKey + "|" + entry.BaseURL
+		if entry.APIKey == "" {
+			uniqueKey = CommandAuthIdentity(entry.Auth) + "|" + entry.BaseURL
+		}
 		if _, exists := seen[uniqueKey]; exists {
 			continue
 		}

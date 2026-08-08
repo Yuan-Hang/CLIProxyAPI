@@ -21,6 +21,14 @@ func NewConfigSynthesizer() *ConfigSynthesizer {
 	return &ConfigSynthesizer{}
 }
 
+func credentialLabel(provider string, commandAuth bool) string {
+	provider = strings.TrimSpace(provider)
+	if commandAuth {
+		return provider + "-auth-command"
+	}
+	return provider + "-apikey"
+}
+
 func addWeightToAttrs(weight *int, attrs map[string]string) {
 	if weight == nil {
 		return
@@ -89,8 +97,15 @@ func (s *ConfigSynthesizer) synthesizeGeminiKeyEntries(ctx *SynthesisContext, en
 		id, token := idGen.Next(idKind, commandAuthIDPartsOrAPIKey(entry.Auth, key, base)...)
 		attrs := map[string]string{
 			"source":       fmt.Sprintf("config:%s[%s]", sourceName, token),
-			"api_key":      key,
 			"config_index": strconv.Itoa(i),
+		}
+		if key != "" {
+			attrs["api_key"] = key
+		}
+		addCommandAuthToAttrs(entry.Auth, attrs)
+		credentialLabelValue := label
+		if hasCommandAuth {
+			credentialLabelValue = credentialLabel(sourceName, true)
 		}
 		metadata := map[string]any{}
 		if entry.DisableCooling {
@@ -147,7 +162,6 @@ func (s *ConfigSynthesizer) synthesizeClaudeKeys(ctx *SynthesisContext) []*corea
 		id, token := idGen.Next("claude:apikey", commandAuthIDPartsOrAPIKey(ck.Auth, key, base)...)
 		attrs := map[string]string{
 			"source":       fmt.Sprintf("config:claude[%s]", token),
-			"api_key":      key,
 			"config_index": strconv.Itoa(i),
 		}
 		if key != "" {
@@ -213,25 +227,21 @@ func (s *ConfigSynthesizer) synthesizeCodexStyleKeys(ctx *SynthesisContext, entr
 	for i := range entries {
 		entry := entries[i]
 		key := strings.TrimSpace(entry.APIKey)
-		if key == "" {
+		hasCommandAuth := entry.Auth != nil && strings.TrimSpace(entry.Auth.Command) != ""
+		if key == "" && !hasCommandAuth {
 			continue
 		}
 		prefix := strings.TrimSpace(entry.Prefix)
 		baseURL := strings.TrimSpace(entry.BaseURL)
-		id, token := idGen.Next(provider+":apikey", key, baseURL)
+		id, token := idGen.Next(provider+":apikey", commandAuthIDPartsOrAPIKey(entry.Auth, key, baseURL)...)
 		attrs := map[string]string{
 			"source":       fmt.Sprintf("config:%s[%s]", provider, token),
-			"api_key":      key,
 			"config_index": strconv.Itoa(i),
-		}
-		id, token := idGen.Next("codex:apikey", idParts...)
-		attrs := map[string]string{
-			"source": fmt.Sprintf("config:codex[%s]", token),
 		}
 		if key != "" {
 			attrs["api_key"] = key
 		}
-		addCommandAuthToAttrs(ck.Auth, attrs)
+		addCommandAuthToAttrs(entry.Auth, attrs)
 		metadata := map[string]any{}
 		if entry.DisableCooling {
 			metadata["disable_cooling"] = true
@@ -256,7 +266,7 @@ func (s *ConfigSynthesizer) synthesizeCodexStyleKeys(ctx *SynthesisContext, entr
 		a := &coreauth.Auth{
 			ID:         id,
 			Provider:   provider,
-			Label:      provider + "-apikey",
+			Label:      credentialLabel(provider, hasCommandAuth),
 			Prefix:     prefix,
 			Status:     coreauth.StatusActive,
 			ProxyURL:   strings.TrimSpace(entry.ProxyURL),

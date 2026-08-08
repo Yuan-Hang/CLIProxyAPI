@@ -784,7 +784,11 @@ func (m *Manager) MarkResult(ctx context.Context, result Result) {
 					} else {
 						switch statusCode {
 						case 401:
-							if disableCooling {
+							if IsCommandAuth(auth) {
+								invalidateCommandAuthToken(auth)
+								state.Unavailable = false
+								state.NextRetryAfter = time.Time{}
+							} else if disableCooling {
 								state.NextRetryAfter = time.Time{}
 							} else {
 								next := now.Add(30 * time.Minute)
@@ -1759,6 +1763,14 @@ func applyAuthFailureState(auth *Auth, resultErr *Error, retryAfter *time.Durati
 	}
 	switch statusCode {
 	case 401:
+		if IsCommandAuth(auth) {
+			invalidateCommandAuthToken(auth)
+			auth.Unavailable = false
+			auth.Status = StatusActive
+			auth.StatusMessage = ""
+			auth.NextRetryAfter = time.Time{}
+			return
+		}
 		auth.StatusMessage = "unauthorized"
 		if disableCooling {
 			auth.NextRetryAfter = time.Time{}
@@ -1821,6 +1833,16 @@ func quotaCooldownAfterFailure(quota QuotaState, now time.Time) (time.Time, int)
 		next = now.Add(cooldown)
 	}
 	return next, nextLevel
+}
+
+func invalidateCommandAuthToken(auth *Auth) {
+	if !IsCommandAuth(auth) {
+		return
+	}
+	if auth.Metadata != nil {
+		delete(auth.Metadata, "access_token")
+	}
+	auth.NextRefreshAfter = time.Time{}
 }
 
 // nextQuotaCooldown returns the next cooldown duration and updated backoff level for repeated quota errors.
