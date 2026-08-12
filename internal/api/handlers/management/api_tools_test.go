@@ -291,7 +291,7 @@ func TestAPICallTransportCommandAuthFallsBackToConfigProxyURL(t *testing.T) {
 		},
 	}
 
-	transport := h.apiCallTransport(auth)
+	transport := h.apiCallTransport(auth, "")
 	httpTransport, ok := transport.(*http.Transport)
 	if !ok {
 		t.Fatalf("transport type = %T, want *http.Transport", transport)
@@ -390,7 +390,7 @@ func TestResolveTokenForAuthRunsCommandAuth(t *testing.T) {
 	}
 
 	h := &Handler{authManager: manager}
-	token, errToken := h.resolveTokenForAuth(context.Background(), auth)
+	token, errToken := h.resolveTokenForAuth(context.Background(), auth, "")
 	if errToken != nil {
 		t.Fatalf("resolveTokenForAuth error: %v", errToken)
 	}
@@ -434,7 +434,7 @@ func TestResolveTokenForAuthRunsCodexCommandAuth(t *testing.T) {
 	}
 
 	h := &Handler{authManager: manager}
-	token, errToken := h.resolveTokenForAuth(context.Background(), auth)
+	token, errToken := h.resolveTokenForAuth(context.Background(), auth, "")
 	if errToken != nil {
 		t.Fatalf("resolveTokenForAuth error: %v", errToken)
 	}
@@ -492,7 +492,7 @@ func TestCodexCommandAuthIndexResolvesToken(t *testing.T) {
 	if auth == nil {
 		t.Fatalf("authByIndex(%q) returned nil", keys[0].AuthIndex)
 	}
-	token, errToken := h.resolveTokenForAuth(context.Background(), auth)
+	token, errToken := h.resolveTokenForAuth(context.Background(), auth, "")
 	if errToken != nil {
 		t.Fatalf("resolveTokenForAuth error: %v", errToken)
 	}
@@ -529,7 +529,7 @@ func TestResolveTokenForAuthRefreshesExpiredCommandAuth(t *testing.T) {
 	}
 
 	h := &Handler{authManager: manager}
-	token, errToken := h.resolveTokenForAuth(context.Background(), auth)
+	token, errToken := h.resolveTokenForAuth(context.Background(), auth, "")
 	if errToken != nil {
 		t.Fatalf("resolveTokenForAuth error: %v", errToken)
 	}

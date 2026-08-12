@@ -164,7 +164,7 @@ func (h *Handler) APICall(c *gin.Context) {
 	}
 	if auth == nil && !hasHeader(reqHeaders, "authorization") {
 		if inferredAuth := h.commandAuthForAPICallURL(parsedURL); inferredAuth != nil {
-			inferredToken, errToken := h.resolveTokenForAuth(c.Request.Context(), inferredAuth)
+			inferredToken, errToken := h.resolveTokenForAuth(c.Request.Context(), inferredAuth, requestProxyURL)
 			if errToken != nil {
 				c.JSON(http.StatusBadRequest, gin.H{"error": "auth token refresh failed"})
 				return
